@@ -16,10 +16,15 @@ export default function VideoContainer() {
   const [remoteStream, setRemoteStream] = useState(null);
   const remote_user_id_ref = useRef(null);
   const wsRef = useRef(null);
-  const peerConnectionRef = useRef(null);
-  const localStreamRef = useRef(null);
+  const peerConnectionRef = useRef(new RTCPeerConnection());
+  const localStreamRef = useRef(new MediaStream());
   const remoteStreamRef = useRef(new MediaStream());
+  const dataChannelRef = useRef(null);
 
+  const [message, setMessage] = useState([]);
+  const [input_val, setInputValue] = useState("");
+
+  
   const create_data = (type, data, from, to) => {
     return ({
       type,
@@ -86,6 +91,11 @@ export default function VideoContainer() {
       }
     });
     // console.log("peerconnection connectionState: ", pc.connectionState);
+    pc.addEventListener("datachannel", (e)=> {
+      dataChannelRef.current = e.channel;
+      add_events_to_datachannel(dataChannelRef.current);
+      console.log(dataChannelRef.current.readyState);
+    });
     return pc;
   }
   const create_offer = async (remote_user_id) => {
@@ -135,6 +145,7 @@ export default function VideoContainer() {
       if(data.type === "create_offer"){
         console.log("create_offer triggered");
         remote_user_id_ref.current = data.from;
+        await create_data_channel();
         await create_offer(data.from);
       }
       else if(data.type === "offer"){
@@ -164,6 +175,39 @@ export default function VideoContainer() {
     console.log("sending: ", data.type);
     wsRef.current.send(JSON.stringify(data));
   }
+  const add_events_to_datachannel = (data_channel)=>{
+    data_channel.addEventListener("open", (e) => {
+      console.log("Data channel open");
+    });
+    data_channel.addEventListener("message", (e) => {
+      const msg = e.data;
+      console.log("message received", e.data);
+      console.log("channel state:", data_channel.readyState);
+      setMessage(prev => [...prev, {
+        text : e.data,
+        sender : "remote",
+      }]);
+    });
+    data_channel.addEventListener("error", (e) => {
+      console.log(e.error);
+    });
+    data_channel.addEventListener("close", (e) => {
+      console.log("data channel closed")
+    });
+    data_channel.addEventListener("closing", (e) => {
+      console.log("closing the data channel...");
+    });
+  }
+  const create_data_channel = async () => {
+    console.log("creating the datachannel...")
+    const pc = peerConnectionRef.current;
+    const data_channel = pc.createDataChannel("raw-rtc-chat");
+    dataChannelRef.current = data_channel;
+
+    add_events_to_datachannel(data_channel);
+    
+
+  }
   useEffect(() => {
     const init = async () => {
       // get access of audio and video
@@ -189,6 +233,16 @@ export default function VideoContainer() {
 
   const joinBtnClick = () => {}
   const newMeetingBtn = () => {}
+  const handleMsgSendBtn = () => {
+    const data_channel = dataChannelRef.current;
+    data_channel.send(input_val);
+    console.log("sending msg: "+ input_val);
+    setMessage(prev => [...prev, {
+      text : input_val,
+      sender : "me",
+    }]);
+    setInputValue("");
+  }
   return (
     <>
       <div className="grid gap-[2em] grid-cols-2">
@@ -207,6 +261,73 @@ export default function VideoContainer() {
           onClick={joinBtnClick}
           className="border p-2 active:bg-slate-500"
           >Join</button>
+      </div>
+      <div 
+        className="w-full max-w-xl mx-auto mt-10 border rounded-lg overflow-hidden text-[#1f1f1f]"
+      >
+
+        <div 
+          id="message"
+          className="h-80 overflow-y-auto bg-gray-100 p-4 flex flex-col gap-3"
+        >
+
+          {message.length ? (
+            message.map((msg, idx) => (
+              <div
+                key={idx}
+                className={`flex ${
+                  msg.sender === "me"
+                    ? "justify-end"
+                    : "justify-start"
+                }`}
+              >
+
+                <div
+                  className={`
+                    max-w-[70%]
+                    px-4 py-2 rounded-2xl shadow
+                    break-words
+                    ${
+                      msg.sender === "me"
+                        ? "bg-blue-500 text-white rounded-br-sm"
+                        : "bg-white text-black rounded-bl-sm"
+                    }
+                  `}
+                >
+                  {msg.text}
+                </div>
+
+              </div>
+            ))
+          ) : (
+            <p className="text-gray-500 text-center">
+              No message yet
+            </p>
+          )}
+
+        </div>
+
+        <div className="flex items-center gap-2 p-3 border-t bg-white">
+
+          <input
+            type="text"
+            placeholder="Enter your message"
+            className="flex-1 border rounded-md px-3 py-2 outline-none"
+            value={input_val}
+            onChange={(e) => setInputValue(e.target.value)}
+          />
+
+          <button
+            className="bg-blue-500 text-white px-4 py-2 rounded-md"
+            onClick={handleMsgSendBtn}
+            onKeyDown={e => {
+              if(e.key === "Enter") handleMsgSendBtn();
+            }}
+          >
+            Send
+          </button>
+
+        </div>
       </div>
     </>
   )
