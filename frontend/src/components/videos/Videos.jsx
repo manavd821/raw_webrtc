@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react'
 
-export default function Videos( {isLocal, stream} ) {
+export default function Videos( {isLocal, stream, isScreenShare} ) {
     const videoRef = useRef(null);
 
     useEffect(() => {
@@ -23,7 +23,7 @@ export default function Videos( {isLocal, stream} ) {
     <video
     autoPlay
     playsInline
-    className="w-full h-72 bg-white scale-x-[-1]"
+    className={`w-full h-72 bg-white ${isScreenShare ? "" : "scale-x-[-1]"}`}
     ref={videoRef}
     muted={isLocal}
     >
