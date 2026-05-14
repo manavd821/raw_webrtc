@@ -25,7 +25,7 @@ export default function Videos( {isLocal, stream} ) {
     playsInline
     className="w-full h-72 bg-white"
     ref={videoRef}
-    muted={isLocal}
+    // muted={isLocal}
     >
       
     </video>
