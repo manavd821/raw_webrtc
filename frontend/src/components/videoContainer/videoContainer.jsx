@@ -156,13 +156,13 @@ export default function VideoContainer() {
       else if(data.type === "answer"){
         console.log("answer triggered");
         
-        peerConnectionRef.current?.setRemoteDescription(
+        await peerConnectionRef.current?.setRemoteDescription(
           new RTCSessionDescription({type : "answer", sdp : data.data})
         );
       }
       else if(data.type === "ice_candidates"){
         console.log("ice_candidates triggered");
-        peerConnectionRef.current?.addIceCandidate(new RTCIceCandidate(data.data));
+        await peerConnectionRef.current?.addIceCandidate(new RTCIceCandidate(data.data));
       }
     });
     
