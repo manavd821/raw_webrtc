@@ -24,7 +24,7 @@ export default function VideoContainer() {
   const [message, setMessage] = useState([]);
   const [input_val, setInputValue] = useState("");
 
-  const [isScreenShare, setIsScreenShare] = useState(false);
+  const isScreenShareRef = useRef(false);
 
   
   const create_data = (type, data, from, to) => {
@@ -244,7 +244,7 @@ export default function VideoContainer() {
         audio:true,
       }); 
       setLocalStream(capture_stream);
-      setIsScreenShare(true);
+      isScreenShareRef.current = true;
       
       const screen_tracks = capture_stream.getVideoTracks()[0];
       await sender.replaceTrack(screen_tracks);
@@ -253,7 +253,7 @@ export default function VideoContainer() {
       screen_tracks.addEventListener("ended", async (e) => {
         await sender.replaceTrack(camera_tracks);
         setLocalStream(localStreamRef.current);
-        setIsScreenShare(false);
+        isScreenShareRef.current = false;
       })
     } catch (error) {
       console.log(error);
@@ -275,7 +275,7 @@ export default function VideoContainer() {
         <Videos 
         isLocal={true} 
         stream={localStream}
-        isScreenShare = {isScreenShare}
+        isScreenShare = {isScreenShareRef.current}
         />
         <Videos
           isLocal={false} 
