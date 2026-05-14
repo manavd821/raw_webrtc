@@ -231,8 +231,31 @@ export default function VideoContainer() {
       );
   },[])
 
-  const joinBtnClick = () => {}
-  const newMeetingBtn = () => {}
+  const hanldeScreenShareBtn = async () => {
+    try {
+      
+      const sender = peerConnectionRef.current.
+      getSenders()
+      .find(sender => sender.track?.kind === "video");
+      
+      const capture_stream = await navigator.mediaDevices.getDisplayMedia({
+        video: true,
+        audio:true,
+      }); 
+      setLocalStream(capture_stream);
+      
+      const screen_tracks = capture_stream.getVideoTracks()[0];
+      await sender.replaceTrack(screen_tracks);
+
+      const camera_tracks = localStreamRef.current.getVideoTracks()[0];
+      screen_tracks.addEventListener("ended", async (e) => {
+        await sender.replaceTrack(camera_tracks);
+        setLocalStream(localStreamRef.current);
+      })
+    } catch (error) {
+      console.log(error);
+    }
+  }
   const handleMsgSendBtn = () => {
     const data_channel = dataChannelRef.current;
     data_channel.send(input_val);
@@ -254,13 +277,13 @@ export default function VideoContainer() {
       </div>
       <div className="w-full flex gap-10 justify-center mt-10">
         <button 
-          onClick={newMeetingBtn}
+          onClick={hanldeScreenShareBtn}
           className="border p-2 active:bg-slate-500"
-        >New Meeting</button>
-        <button 
+        >Share screen</button>
+        {/* <button 
           onClick={joinBtnClick}
           className="border p-2 active:bg-slate-500"
-          >Join</button>
+          >Join</button> */}
       </div>
       <div 
         className="w-full max-w-xl mx-auto mt-10 border rounded-lg overflow-hidden text-[#1f1f1f]"
