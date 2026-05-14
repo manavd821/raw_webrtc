@@ -7,6 +7,7 @@ origins = [
     "http://localhost:3000",   # Typical React/Next.js dev port
     "http://localhost:5173",   # Typical Vite dev port
     # "https://your-production-domain.com",
+    "https://raw-webrtc-three.vercel.app"
 ]
 
 app = FastAPI()

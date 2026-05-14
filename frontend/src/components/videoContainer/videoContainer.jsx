@@ -2,7 +2,7 @@ import React, { useEffect, useState, useRef } from 'react'
 import Videos from '../videos/Videos'
 
 const uid = String(Math.floor(Math.random() * 10000));
-const ws_link = `ws://127.0.0.1:8000/ws/${uid}`;
+const ws_link = `wss://raw-webrtc-jb3l.onrender.com/ws/${uid}`;
 // const ws_link = `ws://192.168.1.5:8000/ws/${uid}`;
 const servers = {
   iceServers: [
