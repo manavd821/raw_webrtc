@@ -216,7 +216,6 @@ export default function VideoContainer() {
         video: true
       })
       
-
       localStreamRef.current = stream;
       setLocalStream(stream);
       peerConnectionRef.current = await create_peer_connection();
