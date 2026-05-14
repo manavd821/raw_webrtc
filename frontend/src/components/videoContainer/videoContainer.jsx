@@ -315,14 +315,15 @@ export default function VideoContainer() {
             className="flex-1 border rounded-md px-3 py-2 outline-none"
             value={input_val}
             onChange={(e) => setInputValue(e.target.value)}
+            onKeyDown={e => {
+              if(e.key === "Enter") handleMsgSendBtn();
+            }
+            }
           />
 
           <button
             className="bg-blue-500 text-white px-4 py-2 rounded-md"
             onClick={handleMsgSendBtn}
-            onKeyDown={e => {
-              if(e.key === "Enter") handleMsgSendBtn();
-            }}
           >
             Send
           </button>
