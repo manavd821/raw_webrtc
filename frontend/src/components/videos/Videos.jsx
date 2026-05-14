@@ -17,7 +17,7 @@ export default function Videos( {isLocal, stream, isScreenShare} ) {
                 console.log("play blocked", err);
               });
             }
-          }, [stream]);
+          }, [stream, isScreenShare]);
           
 
   return (
