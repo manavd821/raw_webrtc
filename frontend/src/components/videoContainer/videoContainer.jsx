@@ -24,7 +24,7 @@ export default function VideoContainer() {
   const [message, setMessage] = useState([]);
   const [input_val, setInputValue] = useState("");
 
-  const isScreenShareRef = useRef(false);
+  const [isScreenShare, setIsScreenShare] = useState(false);
 
   
   const create_data = (type, data, from, to) => {
@@ -243,8 +243,8 @@ export default function VideoContainer() {
         video: true,
         audio:true,
       }); 
+      setIsScreenShare(true);
       setLocalStream(capture_stream);
-      isScreenShareRef.current = true;
       
       const screen_tracks = capture_stream.getVideoTracks()[0];
       await sender.replaceTrack(screen_tracks);
@@ -252,9 +252,10 @@ export default function VideoContainer() {
       const camera_tracks = localStreamRef.current.getVideoTracks()[0];
       screen_tracks.addEventListener("ended", async (e) => {
         await sender.replaceTrack(camera_tracks);
+        setIsScreenShare(false);
         setLocalStream(localStreamRef.current);
-        isScreenShareRef.current = false;
-      })
+      });
+
     } catch (error) {
       console.log(error);
     }
@@ -275,11 +276,12 @@ export default function VideoContainer() {
         <Videos 
         isLocal={true} 
         stream={localStream}
-        isScreenShare = {isScreenShareRef.current}
+        isScreenShare = {isScreenShare}
         />
         <Videos
           isLocal={false} 
           stream={remoteStream} 
+          isScreenShare = {isScreenShare}
           />
       </div>
       <div className="w-full flex gap-10 justify-center mt-10">

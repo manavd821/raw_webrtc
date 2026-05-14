@@ -23,7 +23,7 @@ export default function Videos( {isLocal, stream, isScreenShare} ) {
     <video
     autoPlay
     playsInline
-    className={`w-full h-72 bg-white`}
+    className={`w-full h-72 bg-white ${isScreenShare ? "" : "scale-x-[-1]"}`}
     ref={videoRef}
     muted={isLocal}
     >
