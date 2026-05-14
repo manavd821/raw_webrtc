@@ -11,19 +11,20 @@ export default function Videos( {isLocal, stream, isScreenShare} ) {
               .then(() => {
                 console.log("playing");
                 console.log(videoRef.current.volume);
+                console.log({isScreenShare});
               })
               .catch(err => {
                 console.log("play blocked", err);
               });
-        }
-    }, [stream]);
-
+            }
+          }, [stream]);
+          
 
   return (
     <video
     autoPlay
     playsInline
-    className={`w-full h-72 bg-white ${isScreenShare ? "" : "scale-x-[-1]"}`}
+    className={`w-full h-72 bg-white ${isLocal && !isScreenShare ? "scale-x-[-1]" : ""}`}
     ref={videoRef}
     muted={isLocal}
     >
