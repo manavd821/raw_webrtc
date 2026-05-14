@@ -16,15 +16,23 @@ export default function Videos( {isLocal, stream, isScreenShare} ) {
               .catch(err => {
                 console.log("play blocked", err);
               });
+              
             }
           }, [stream, isScreenShare]);
           
-
+      useEffect(()=>{
+        if(videoRef.current){
+          videoRef.current.style.transform =
+            isLocal && !isScreenShare
+              ? "scaleX(-1)"
+              : "scaleX(1)";
+        }
+      }, [isLocal, isScreenShare])
   return (
     <video
     autoPlay
     playsInline
-    className={`w-full h-72 bg-white ${isLocal && !isScreenShare ? "scale-x-[-1]" : ""}`}
+    className={`w-full h-72 bg-white`}
     ref={videoRef}
     muted={isLocal}
     >
