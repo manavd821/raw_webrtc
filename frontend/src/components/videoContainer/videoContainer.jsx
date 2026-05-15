@@ -190,7 +190,7 @@ export default function VideoContainer() {
       console.log("data channel is not established yet...");
     }
     else{
-      data_channel.send(data);
+      data_channel.send(JSON.stringify(data));
       console.log("sending msg: "+ data);
     }
   }
@@ -199,18 +199,19 @@ export default function VideoContainer() {
       console.log("Data channel open");
     });
     data_channel.addEventListener("message", (e) => {
-      const type = e.data.type;
-      console.log("message received", e.data);
+      const parsed_data = JSON.parse(e.data);
+      console.log("message received");
+      console.log(parsed_data)
       console.log("channel state:", data_channel.readyState);
 
-      if(type === "chat"){
+      if(parsed_data.type === "chat"){
         setMessage(prev => [...prev, {
-          text : e.data.data,
+          text : parsed_data.data,
           sender : "remote",
         }]);
       }
-      else if(type === "subtitle"){
-        setRemoteSubtitle(e.data.data);
+      else if(parsed_data.type === "subtitle"){
+        setRemoteSubtitle(parsed_data.data);
       }
     });
     data_channel.addEventListener("error", (e) => {
