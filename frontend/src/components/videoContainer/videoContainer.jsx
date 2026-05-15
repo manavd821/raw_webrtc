@@ -26,15 +26,21 @@ export default function VideoContainer() {
 
   const [isScreenShare, setIsScreenShare] = useState(false);
 
+  const speechRecognitionRef = useRef(new SpeechRecognition());
+  const [localSubtitle, setLocalSubtitle] = useState("");
+  const [remoteSubtitle, setRemoteSubtitle] = useState("");
   
-  const create_data = (type, data, from, to) => {
-    return ({
+  const create_data = (type, data, from, to) => ({
       type,
       data,
       from,
       to,
     });
-  }
+  
+  const create_msg_data = (type, data) => ({
+    type,
+    data,
+  })
 
   const create_peer_connection = async () => {
     console.log("creating peer connection");
@@ -177,18 +183,35 @@ export default function VideoContainer() {
     console.log("sending: ", data.type);
     wsRef.current.send(JSON.stringify(data));
   }
+  const send_msg_through_data_channel = (data) => {
+    console.log("sending msg through data channel: ", data);
+    const data_channel = dataChannelRef.current;
+    if(!data_channel){
+      console.log("data channel is not established yet...");
+    }
+    else{
+      data_channel.send(data);
+      console.log("sending msg: "+ data);
+    }
+  }
   const add_events_to_datachannel = (data_channel)=>{
     data_channel.addEventListener("open", (e) => {
       console.log("Data channel open");
     });
     data_channel.addEventListener("message", (e) => {
-      const msg = e.data;
+      const type = e.data.type;
       console.log("message received", e.data);
       console.log("channel state:", data_channel.readyState);
-      setMessage(prev => [...prev, {
-        text : e.data,
-        sender : "remote",
-      }]);
+
+      if(type === "chat"){
+        setMessage(prev => [...prev, {
+          text : e.data.data,
+          sender : "remote",
+        }]);
+      }
+      else if(type === "subtitle"){
+        setRemoteSubtitle(e.data.data);
+      }
     });
     data_channel.addEventListener("error", (e) => {
       console.log(e.error);
@@ -209,6 +232,31 @@ export default function VideoContainer() {
     add_events_to_datachannel(data_channel);
     
 
+  }
+  const create_speech_recognition =  () => {
+    console.log("Enabling subtitle")
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const SpeechRecognitionEvent = window.SpeechRecognitionEvent || window.webkitSpeechRecognitionEvent;
+
+    const recognition = new SpeechRecognition();
+    speechRecognitionRef.current = recognition;
+
+    recognition.continuous = true;
+    recognition.lang = "en-US";
+    recognition.interimResults = true;
+
+    recognition.addEventListener("result", (e)=>{
+      let transcript = "";
+      console.log(e.results);
+      for(let i = e.resultIndex; i< e.results.length; i++){
+          transcript += e.results[i][0].transcript;
+      }
+      setLocalSubtitle(transcript);
+      console.log(transcript);
+      send_msg_through_data_channel(create_msg_data("subtitle", transcript));
+    });
+
+    recognition.start();
   }
   useEffect(() => {
     const init = async () => {
@@ -261,9 +309,10 @@ export default function VideoContainer() {
     }
   }
   const handleMsgSendBtn = () => {
-    const data_channel = dataChannelRef.current;
-    data_channel.send(input_val);
-    console.log("sending msg: "+ input_val);
+
+    
+    send_msg_through_data_channel(create_msg_data("chat", input_val));
+
     setMessage(prev => [...prev, {
       text : input_val,
       sender : "me",
@@ -273,26 +322,48 @@ export default function VideoContainer() {
   return (
     <>
       <div className="grid gap-[2em] grid-cols-2">
+      <div
+      className="flex flex-col gap-1 items-center"
+      >
         <Videos 
         isLocal={true} 
         stream={localStream}
         isScreenShare = {isScreenShare}
         />
+        <p 
+        className=""
+        >{localSubtitle}</p>
+      </div>
+      <div
+      className="flex flex-col gap-1 items-center"
+      >
         <Videos
           isLocal={false} 
           stream={remoteStream} 
           isScreenShare = {isScreenShare}
           />
+        <p
+        className=""
+        >{remoteSubtitle}</p>
+      </div>
+
       </div>
       <div className="w-full flex gap-10 justify-center mt-10">
         <button 
           onClick={hanldeScreenShareBtn}
           className="border p-2 active:bg-slate-500"
         >Share screen</button>
-        {/* <button 
-          onClick={joinBtnClick}
+        <button 
+          onClick={create_speech_recognition}
           className="border p-2 active:bg-slate-500"
-          >Join</button> */}
+          >Enable Subtitle</button>
+      </div>
+      <div className="absolute bottom-15 w-full flex justify-center bg-inherit">
+
+        {/* <div className="bg-black/70 text-white px-4 py-2 rounded-lg">
+          {subtitle}
+        </div> */}
+
       </div>
       <div 
         className="w-full max-w-xl mx-auto mt-10 border rounded-lg overflow-hidden text-[#1f1f1f]"

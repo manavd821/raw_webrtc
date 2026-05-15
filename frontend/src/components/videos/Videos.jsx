@@ -36,7 +36,6 @@ export default function Videos( {isLocal, stream, isScreenShare} ) {
     ref={videoRef}
     muted={isLocal}
     >
-      
     </video>
   )
 }
