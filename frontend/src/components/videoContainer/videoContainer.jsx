@@ -29,6 +29,7 @@ export default function VideoContainer() {
   const speechRecognitionRef = useRef(new SpeechRecognition());
   const [localSubtitle, setLocalSubtitle] = useState("");
   const [remoteSubtitle, setRemoteSubtitle] = useState("");
+  const [isSubTitleOn, setIsSubtitleOn] = useState(false);
   
   const create_data = (type, data, from, to) => ({
       type,
@@ -235,6 +236,10 @@ export default function VideoContainer() {
 
   }
   const create_speech_recognition =  () => {
+    if(isSubTitleOn) {
+      console.log("subtitles are already active");
+      return;
+    }
     console.log("Enabling subtitle")
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     const SpeechRecognitionEvent = window.SpeechRecognitionEvent || window.webkitSpeechRecognitionEvent;
@@ -258,6 +263,7 @@ export default function VideoContainer() {
     });
 
     recognition.start();
+    setIsSubtitleOn(true);
   }
   useEffect(() => {
     const init = async () => {
@@ -282,6 +288,7 @@ export default function VideoContainer() {
   },[])
 
   const hanldeScreenShareBtn = async () => {
+    if(isScreenShare) return;
     try {
       
       const sender = peerConnectionRef.current.
