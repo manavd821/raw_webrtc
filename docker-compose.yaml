@@ -1,0 +1,13 @@
+services:
+  coturn:
+    image: coturn/coturn
+    ports:
+      - "3478:3478"
+      - "3478:3478/udp"
+      - "49152-49200:49152-49200/udp"
+    volumes:
+      - type: bind
+        source: ./turnserver.conf
+        target: /etc/coturn/turnserver.conf
+    entrypoint: ["turnserver"]          # ← override entrypoint
+    command: ["-c", "/etc/coturn/turnserver.conf"]  # ← force config path

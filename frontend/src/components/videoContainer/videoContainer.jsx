@@ -1,446 +1,571 @@
-import React, { useEffect, useState, useRef } from 'react'
-import Videos from '../videos/Videos'
+  import React, { useEffect, useState, useRef } from 'react'
+  import Videos from '../videos/Videos'
 
-const uid = String(Math.floor(Math.random() * 10000));
-const ws_link = `wss://raw-webrtc-jb3l.onrender.com/ws/${uid}`;
-// const ws_link = `ws://192.168.1.5:8000/ws/${uid}`;
-const servers = {
-  iceServers: [
-    { urls: "stun:stun.l.google.com:19302" },
-    { urls: "stun:stun1.l.google.com:19302" },
-  ]
-};
+  const uid = String(Math.floor(Math.random() * 10000));
+  const ws_url = `wss://raw-webrtc-jb3l.onrender.com/ws/${uid}`;
+  // const ws_url = `ws://192.168.1.5:8000/ws/${uid}`;
+  const ws_recording_url = `ws://127.0.0.1:8000/ws/upload_video/${uid}`
 
-export default function VideoContainer() {
-  const [localStream, setLocalStream] = useState(null);
-  const [remoteStream, setRemoteStream] = useState(null);
-  const remote_user_id_ref = useRef(null);
-  const wsRef = useRef(null);
-  const peerConnectionRef = useRef(new RTCPeerConnection());
-  const localStreamRef = useRef(new MediaStream());
-  const remoteStreamRef = useRef(new MediaStream());
-  const dataChannelRef = useRef(null);
+  const servers = {
+    iceServers: [
+      { urls: "stun:stun.l.google.com:19302" },
+      { urls: "stun:stun1.l.google.com:19302" },
+      {
+        urls: "stun:192.168.1.23:3478"
+      },
+      { 
+        urls: "turn:192.168.1.23:3478",
+        username: "test",
+        credential : "test123",
+      }
+    ],
+    iceTransportPolicy: "relay",
+  };
 
-  const [message, setMessage] = useState([]);
-  const [input_val, setInputValue] = useState("");
+  export default function VideoContainer() {
+    const [localStream, setLocalStream] = useState(null);
+    const [remoteStream, setRemoteStream] = useState(null);
+    const remote_user_id_ref = useRef(null);
+    const wsRef = useRef(null);
+    const wsRecordingRef = useRef(null);
+    const peerConnectionRef = useRef(new RTCPeerConnection());
+    const localStreamRef = useRef(new MediaStream());
+    const remoteStreamRef = useRef(new MediaStream());
+    const dataChannelRef = useRef(null);
 
-  const [isScreenShare, setIsScreenShare] = useState(false);
+    const [message, setMessage] = useState([]);
+    const [input_val, setInputValue] = useState("");
 
-  const speechRecognitionRef = useRef(new SpeechRecognition());
-  const [localSubtitle, setLocalSubtitle] = useState("");
-  const [remoteSubtitle, setRemoteSubtitle] = useState("");
-  const [isSubTitleOn, setIsSubtitleOn] = useState(false);
-  
-  const create_data = (type, data, from, to) => ({
+    const [isScreenShare, setIsScreenShare] = useState(false);
+
+    const speechRecognitionRef = useRef(new SpeechRecognition());
+    const [localSubtitle, setLocalSubtitle] = useState("");
+    const [remoteSubtitle, setRemoteSubtitle] = useState("");
+    const [isSubTitleOn, setIsSubtitleOn] = useState(false);
+
+    const mediaRecorderRef = useRef(new MediaRecorder(new MediaStream()));
+    const [record_btn_val, setRecordBtnValue] = useState("Record");
+    
+    const create_data = (type, data, from, to) => ({
+        type,
+        data,
+        from,
+        to,
+      });
+    
+    const create_msg_data = (type, data) => ({
       type,
       data,
-      from,
-      to,
-    });
-  
-  const create_msg_data = (type, data) => ({
-    type,
-    data,
-  })
-
-  const create_peer_connection = async () => {
-    console.log("creating peer connection");
-    const pc = new RTCPeerConnection(servers);
-
-    localStreamRef.current?.getTracks().forEach(track => {
-      pc.addTrack(track, localStreamRef.current);
     })
 
-    pc.addEventListener("track", (e) => {
-      e.streams[0].getTracks().forEach((track) => {
-        remoteStreamRef.current.addTrack(track);
+    const create_peer_connection = async () => {
+      console.log("creating peer connection");
+      const pc = new RTCPeerConnection(servers);
+
+      localStreamRef.current?.getTracks().forEach(track => {
+        pc.addTrack(track, localStreamRef.current);
       })
-      console.log({"e.streams[]" : e.streams});
-      setRemoteStream(remoteStreamRef.current);
-    });
 
-    pc.addEventListener("icecandidate", (e) => {
-      // send it to server
-      console.log("recieved the icecandidate");
-      console.log(e.candidate)
-      if(e.candidate !== null){
-        const data = {
-          type : "ice_candidates",
-          data : e.candidate,
-          from : uid,
-          to : remote_user_id_ref.current,
-        }
-        send_msg(data);
-      }
-    });
-    pc.addEventListener("connectionstatechange", (event) => {
-      switch (pc.connectionState) {
-        case "new":
-          console.log("connectionstate: new")
-        case "connecting":
-          console.log("connectionstate: Connecting…");
-          break;
-        case "connected":
-          console.log("connectionstate: connected");
-          console.log("remoteStream.getAudioTracks(): ", remoteStreamRef.current.getAudioTracks());
-          console.log("remoteStream.getVideoTracks(): ", remoteStreamRef.current.getVideoTracks());
-          break;
-        case "disconnected":
-          console.log("connectionstate: Disconnecting…");
-          break;
-        case "closed":
-          console.log("connectionstate: Offline");
-          break;
-        case "failed":
-          console.log("connectionstate: Error");
-          break;
-        default:
-          console.log("connectionstate: Unknown");
-          break;
-      }
-    });
-    // console.log("peerconnection connectionState: ", pc.connectionState);
-    pc.addEventListener("datachannel", (e)=> {
-      dataChannelRef.current = e.channel;
-      add_events_to_datachannel(dataChannelRef.current);
-      console.log(dataChannelRef.current.readyState);
-    });
-    return pc;
-  }
-  const create_offer = async (remote_user_id) => {
-    console.log("creating the offer");
-    try {
-      const pc = peerConnectionRef.current ;
-      // const pc = new RTCPeerConnection();
-      const offer = await pc.createOffer();
-      await pc.setLocalDescription(offer);
-      
-      const data = create_data("offer", offer.sdp, uid, remote_user_id);
-      send_msg(data);
-    } catch (error) {
-      console.log(error)
-    }
-  }
-  const create_ans = async (remote_user_id, offer_sdp) => {
-    console.log("creating the answer");
-    try {
-      const pc = peerConnectionRef.current ;
-      // const pc = new RTCPeerConnection();
-  
-      await pc.setRemoteDescription({type : "offer", sdp : offer_sdp});
-      const answer = await pc.createAnswer();
-      await pc.setLocalDescription({type : answer.type, sdp : answer.sdp});
-  
-      const data = create_data("answer", answer.sdp, uid, remote_user_id)
-      send_msg(data); 
-    } catch (error) {
-      console.log(error);
-    }
-  }
-
-  const connect_through_websocket = async () => {
-    const ws = new WebSocket(ws_link);
-
-    ws.addEventListener("open", (e) => {
-      console.log("Websocket Connection established");
-    });
-    
-    ws.addEventListener("error", error => {
-      console.error("ws error", error);
-    })
-    ws.addEventListener("message",async (e) =>{
-      const data = JSON.parse(e.data);
-
-      if(data.type === "create_offer"){
-        console.log("create_offer triggered");
-        remote_user_id_ref.current = data.from;
-        await create_data_channel();
-        await create_offer(data.from);
-      }
-      else if(data.type === "offer"){
-        console.log("offer triggered");
-        remote_user_id_ref.current = data.from;
-        await create_ans(data.from, data.data);
-      }
-      else if(data.type === "answer"){
-        console.log("answer triggered");
-        
-        await peerConnectionRef.current?.setRemoteDescription(
-          new RTCSessionDescription({type : "answer", sdp : data.data})
-        );
-      }
-      else if(data.type === "ice_candidates"){
-        console.log("ice_candidates triggered");
-        await peerConnectionRef.current?.addIceCandidate(new RTCIceCandidate(data.data));
-      }
-    });
-    
-    return ws;
-  }
-  const send_msg = (data) => {
-    if(wsRef.current === null){
-      throw Error("WebSocket object ws is not exists");
-    }
-    console.log("sending: ", data.type);
-    wsRef.current.send(JSON.stringify(data));
-  }
-  const send_msg_through_data_channel = (data) => {
-    console.log("sending msg through data channel: ", data);
-    const data_channel = dataChannelRef.current;
-    if(!data_channel){
-      console.log("data channel is not established yet...");
-    }
-    else{
-      data_channel.send(JSON.stringify(data));
-      console.log("sending msg: "+ data);
-    }
-  }
-  const add_events_to_datachannel = (data_channel)=>{
-    data_channel.addEventListener("open", (e) => {
-      console.log("Data channel open");
-    });
-    data_channel.addEventListener("message", (e) => {
-      const parsed_data = JSON.parse(e.data);
-      console.log("message received");
-      console.log(parsed_data)
-      console.log("channel state:", data_channel.readyState);
-
-      if(parsed_data.type === "chat"){
-        setMessage(prev => [...prev, {
-          text : parsed_data.data,
-          sender : "remote",
-        }]);
-      }
-      else if(parsed_data.type === "subtitle"){
-        setRemoteSubtitle(parsed_data.data);
-      }
-    });
-    data_channel.addEventListener("error", (e) => {
-      console.log(e.error);
-    });
-    data_channel.addEventListener("close", (e) => {
-      console.log("data channel closed")
-    });
-    data_channel.addEventListener("closing", (e) => {
-      console.log("closing the data channel...");
-    });
-  }
-  const create_data_channel = async () => {
-    console.log("creating the datachannel...")
-    const pc = peerConnectionRef.current;
-    const data_channel = pc.createDataChannel("raw-rtc-chat");
-    dataChannelRef.current = data_channel;
-
-    add_events_to_datachannel(data_channel);
-    
-
-  }
-  const create_speech_recognition =  () => {
-    if(isSubTitleOn) {
-      console.log("subtitles are already active");
-      return;
-    }
-    console.log("Enabling subtitle")
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    const SpeechRecognitionEvent = window.SpeechRecognitionEvent || window.webkitSpeechRecognitionEvent;
-
-    const recognition = new SpeechRecognition();
-    speechRecognitionRef.current = recognition;
-
-    recognition.continuous = true;
-    recognition.lang = "en-US";
-    recognition.interimResults = true;
-
-    recognition.addEventListener("result", (e)=>{
-      let transcript = "";
-      console.log(e.results);
-      for(let i = e.resultIndex; i< e.results.length; i++){
-          transcript += e.results[i][0].transcript;
-      }
-      setLocalSubtitle(transcript);
-      console.log(transcript);
-      send_msg_through_data_channel(create_msg_data("subtitle", transcript));
-    });
-
-    recognition.start();
-    setIsSubtitleOn(true);
-  }
-  useEffect(() => {
-    const init = async () => {
-      // get access of audio and video
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio : true,
-        video: true
-      })
-      
-      localStreamRef.current = stream;
-      setLocalStream(stream);
-      peerConnectionRef.current = await create_peer_connection();
-
-      wsRef.current = await connect_through_websocket();
-    }
-      init();
-
-      return (
-        
-        wsRef.current?.close(1000)
-      );
-  },[])
-
-  const hanldeScreenShareBtn = async () => {
-    if(isScreenShare) return;
-    try {
-      
-      const sender = peerConnectionRef.current.
-      getSenders()
-      .find(sender => sender.track?.kind === "video");
-      
-      const capture_stream = await navigator.mediaDevices.getDisplayMedia({
-        video: true,
-        audio:true,
-      }); 
-      setIsScreenShare(true);
-      setLocalStream(capture_stream);
-      
-      const screen_tracks = capture_stream.getVideoTracks()[0];
-      await sender.replaceTrack(screen_tracks);
-
-      const camera_tracks = localStreamRef.current.getVideoTracks()[0];
-      screen_tracks.addEventListener("ended", async (e) => {
-        await sender.replaceTrack(camera_tracks);
-        setIsScreenShare(false);
-        setLocalStream(localStreamRef.current);
+      pc.addEventListener("track", (e) => {
+        e.streams[0].getTracks().forEach((track) => {
+          remoteStreamRef.current.addTrack(track);
+        })
+        console.log({"e.streams[]" : e.streams});
+        setRemoteStream(remoteStreamRef.current);
       });
 
-    } catch (error) {
-      console.log(error);
+      pc.addEventListener("icecandidate", (e) => {
+        // send it to server
+        console.log("recieved the icecandidate");
+        // console.log(e.candidate.type);
+        console.log(e.candidate)
+        if(e.candidate !== null){
+          const data = {
+            type : "ice_candidates",
+            data : e.candidate,
+            from : uid,
+            to : remote_user_id_ref.current,
+          }
+          send_msg(data);
+        }
+      });
+      pc.addEventListener("connectionstatechange", (event) => {
+        switch (pc.connectionState) {
+          case "new":
+            console.log("connectionstate: new")
+            break;
+          case "connecting":
+            console.log("connectionstate: Connecting…");
+            break;
+          case "connected":
+            console.log("connectionstate: connected");
+            console.log("remoteStream.getAudioTracks(): ", remoteStreamRef.current.getAudioTracks());
+            console.log("remoteStream.getVideoTracks(): ", remoteStreamRef.current.getVideoTracks());
+            break;
+          case "disconnected":
+            console.log("connectionstate: Disconnecting…");
+            break;
+          case "closed":
+            console.log("connectionstate: Offline");
+            break;
+          case "failed":
+            console.log("connectionstate: Error");
+            break;
+          default:
+            console.log("connectionstate: Unknown");
+            break;
+        }
+      });
+      // console.log("peerconnection connectionState: ", pc.connectionState);
+      pc.addEventListener("datachannel", (e)=> {
+        dataChannelRef.current = e.channel;
+        add_events_to_datachannel(dataChannelRef.current);
+        console.log(dataChannelRef.current.readyState);
+      });
+
+      pc.addEventListener("icecandidateerror", (event) => {
+        console.error("ICE candidate error:", event.errorCode, event.errorText, event.url);
+      });
+
+      pc.addEventListener("iceconnectionstatechange", () => {
+        console.log("ICE connection state:", pc.iceConnectionState);
+      });
+
+      pc.addEventListener("icegatheringstatechange", () => {
+        console.log("ICE gathering state:", pc.iceGatheringState);
+      });
+
+      return pc;
     }
-  }
-  const handleMsgSendBtn = () => {
-
+    const create_offer = async (remote_user_id) => {
+      console.log("creating the offer");
+      try {
+        const pc = peerConnectionRef.current ;
+        // const pc = new RTCPeerConnection();
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        
+        const data = create_data("offer", offer.sdp, uid, remote_user_id);
+        send_msg(data);
+      } catch (error) {
+        console.log(error)
+      }
+    }
+    const create_ans = async (remote_user_id, offer_sdp) => {
+      console.log("creating the answer");
+      try {
+        const pc = peerConnectionRef.current ;
+        // const pc = new RTCPeerConnection();
     
-    send_msg_through_data_channel(create_msg_data("chat", input_val));
+        await pc.setRemoteDescription({type : "offer", sdp : offer_sdp});
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription({type : answer.type, sdp : answer.sdp});
+    
+        const data = create_data("answer", answer.sdp, uid, remote_user_id)
+        send_msg(data); 
+      } catch (error) {
+        console.log(error);
+      }
+    }
+    const handle_websocket_recieved_text_data = async (data_string) => {
+        const data = JSON.parse(data_string);
 
-    setMessage(prev => [...prev, {
-      text : input_val,
-      sender : "me",
-    }]);
-    setInputValue("");
-  }
-  return (
-    <>
-      <div className="grid gap-[2em] grid-cols-2">
-      <div
-      className="flex flex-col gap-1 items-center"
-      >
-        <Videos 
-        isLocal={true} 
-        stream={localStream}
-        isScreenShare = {isScreenShare}
-        />
-        <p 
-        className=""
-        >{localSubtitle}</p>
-      </div>
-      <div
-      className="flex flex-col gap-1 items-center"
-      >
-        <Videos
-          isLocal={false} 
-          stream={remoteStream} 
+        if(data.type === "create_offer"){
+          console.log("create_offer triggered");
+          remote_user_id_ref.current = data.from;
+          await create_data_channel();
+          await create_offer(data.from);
+        }
+        else if(data.type === "offer"){
+          console.log("offer triggered");
+          remote_user_id_ref.current = data.from;
+          await create_ans(data.from, data.data);
+        }
+        else if(data.type === "answer"){
+          console.log("answer triggered");
+          
+          await peerConnectionRef.current?.setRemoteDescription(
+            new RTCSessionDescription({type : "answer", sdp : data.data})
+          );
+        }
+        else if(data.type === "ice_candidates"){
+          console.log("ice_candidates triggered");
+          await peerConnectionRef.current?.addIceCandidate(new RTCIceCandidate(data.data));
+        }
+        else if(data.type === "recording"){
+          console.log(data.message);
+          console.log(data.path);
+        }
+    }
+    const establish_websocket_connection = async (url) => {
+      const ws = new WebSocket(url);
+
+      ws.addEventListener("open", (e) => {
+        console.log("Websocket Connection established");
+      });
+      
+      ws.addEventListener("error", error => {
+        console.error("ws error", error);
+      })
+      ws.addEventListener("message",async (e) =>{
+        if(typeof e.data === "string"){
+          await handle_websocket_recieved_text_data(e.data);
+        }
+      });
+      
+      return ws;
+    }
+    const send_msg = (data) => {
+      if(wsRef.current === null){
+        throw Error("WebSocket object ws is not exists");
+      }
+      console.log("sending: ", data.type);
+      wsRef.current.send(JSON.stringify(data));
+    }
+    const send_recording_bytes = (chunk) => {
+      if(wsRecordingRef.current === null)
+        throw Error("WebSocket object ws is not exists");
+      console.log("sending video/audio bytes...");
+      wsRecordingRef.current.send(chunk);
+    }
+    const send_msg_through_data_channel = (data) => {
+      console.log("sending msg through data channel: ", data);
+      const data_channel = dataChannelRef.current;
+      if(!data_channel){
+        console.log("data channel is not established yet...");
+      }
+      else{
+        data_channel.send(JSON.stringify(data));
+        console.log("sending msg: "+ data);
+      }
+    }
+    const add_events_to_datachannel = (data_channel)=>{
+      data_channel.addEventListener("open", (e) => {
+        console.log("Data channel open");
+      });
+      data_channel.addEventListener("message", (e) => {
+        const parsed_data = JSON.parse(e.data);
+        console.log("message received");
+        console.log(parsed_data)
+        console.log("channel state:", data_channel.readyState);
+
+        if(parsed_data.type === "chat"){
+          setMessage(prev => [...prev, {
+            text : parsed_data.data,
+            sender : "remote",
+          }]);
+        }
+        else if(parsed_data.type === "subtitle"){
+          setRemoteSubtitle(parsed_data.data);
+        }
+      });
+      data_channel.addEventListener("error", (e) => {
+        console.log(e.error);
+      });
+      data_channel.addEventListener("close", (e) => {
+        console.log("data channel closed")
+      });
+      data_channel.addEventListener("closing", (e) => {
+        console.log("closing the data channel...");
+      });
+    }
+    const create_data_channel = async () => {
+      console.log("creating the datachannel...")
+      const pc = peerConnectionRef.current;
+      const data_channel = pc.createDataChannel("raw-rtc-chat");
+      dataChannelRef.current = data_channel;
+
+      add_events_to_datachannel(data_channel);
+      
+
+    }
+    const create_speech_recognition =  () => {
+      if(isSubTitleOn) {
+        console.log("subtitles are already active");
+        return;
+      }
+      console.log("Enabling subtitle")
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      const SpeechRecognitionEvent = window.SpeechRecognitionEvent || window.webkitSpeechRecognitionEvent;
+
+      const recognition = new SpeechRecognition();
+      speechRecognitionRef.current = recognition;
+
+      recognition.continuous = true;
+      recognition.lang = "en-US";
+      recognition.interimResults = true;
+
+      recognition.addEventListener("result", (e)=>{
+        let transcript = "";
+        console.log(e.results);
+        for(let i = e.resultIndex; i< e.results.length; i++){
+            transcript += e.results[i][0].transcript;
+        }
+        setLocalSubtitle(transcript);
+        console.log(transcript);
+        send_msg_through_data_channel(create_msg_data("subtitle", transcript));
+      });
+
+      recognition.start();
+      setIsSubtitleOn(true);
+    }
+    const create_media_recorder = (stream) => {
+        const mediaRecorder = new MediaRecorder(stream);
+        
+        mediaRecorder.addEventListener("dataavailable", (e)=>{
+          const blob = e.data;
+          console.log("blob size: ", blob.size);
+          if(blob.size > 0){
+            // send over ws
+            send_recording_bytes(blob);
+          }
+        });
+
+        mediaRecorder.addEventListener("error", e => {
+          console.log(e.error);
+        });
+        mediaRecorder.addEventListener("pause", e => {
+          console.log("recording paused.");
+        });
+        mediaRecorder.addEventListener("resume", e => {
+          console.log("recording resumed.");
+        });
+        mediaRecorder.addEventListener("start", e => {
+          console.log("media recording started");
+        });
+        mediaRecorder.addEventListener("stop", e => {
+          console.log("media recording stopped");
+        });
+        
+        return mediaRecorder;
+    }
+    useEffect(() => {
+      const init = async () => {
+        // get access of audio and video
+        const stream = await navigator.mediaDevices.getUserMedia({
+          audio : true,
+          video: true
+        })
+        
+        localStreamRef.current = stream;
+        mediaRecorderRef.current = create_media_recorder(stream);
+
+        setLocalStream(stream);
+        peerConnectionRef.current = await create_peer_connection();
+
+        wsRef.current = await establish_websocket_connection(ws_url);
+        wsRecordingRef.current = await establish_websocket_connection(ws_recording_url);
+      }
+        init();
+
+        return () => {
+
+          wsRef.current?.close(1000);
+
+          wsRecordingRef.current?.close(1000);
+
+          mediaRecorderRef.current?.stop();
+
+          peerConnectionRef.current?.close();
+      };
+    },[])
+
+    const hanldeScreenShareBtn = async () => {
+      if(isScreenShare) return;
+      try {
+        
+        const sender = peerConnectionRef.current.
+        getSenders()
+        .find(sender => sender.track?.kind === "video");
+        
+        const capture_stream = await navigator.mediaDevices.getDisplayMedia({
+          video: true,
+          audio:true,
+        });
+        setIsScreenShare(true);
+        setLocalStream(capture_stream);
+        mediaRecorderRef.current = create_media_recorder(capture_stream);
+        
+        const screen_tracks = capture_stream.getVideoTracks()[0];
+        await sender.replaceTrack(screen_tracks);
+
+        const camera_tracks = localStreamRef.current.getVideoTracks()[0];
+        screen_tracks.addEventListener("ended", async (e) => {
+          await sender.replaceTrack(camera_tracks);
+          mediaRecorderRef.current = create_media_recorder(localStreamRef.current);
+          setIsScreenShare(false);
+          setLocalStream(localStreamRef.current);
+        });
+
+      } catch (error) {
+        console.log(error);
+      }
+    }
+    const handleMsgSendBtn = () => {
+
+      
+      send_msg_through_data_channel(create_msg_data("chat", input_val));
+
+      setMessage(prev => [...prev, {
+        text : input_val,
+        sender : "me",
+      }]);
+      setInputValue("");
+    }
+    const handleRecordBtn = () => {
+      const mediaRecorder = mediaRecorderRef.current;
+      if(mediaRecorder.state === "inactive"){
+        mediaRecorder.start(5000);
+        console.log("starting media recording...");
+        console.log("recording started:", mediaRecorder.state);
+        console.log("recording memetype: ", mediaRecorder.mimeType);
+        setRecordBtnValue("Pause");
+      }
+      else if(mediaRecorder.state === "recording"){
+        console.log("pausing media recording...");
+        mediaRecorder.pause();
+        setRecordBtnValue("Continue");
+      }
+      else if(mediaRecorder.state === "paused"){
+        console.log("resuming media recording");
+        mediaRecorder.resume();
+        setRecordBtnValue("Pause");
+      }
+
+    }
+    const handleStopRecordingBtn = () => {
+      const mediaRecorder = mediaRecorderRef.current;
+      console.log("stoping the recording of media...");
+      mediaRecorder.stop();
+      setRecordBtnValue("Record");
+    }
+    return (
+      <>
+        <div className="grid gap-[2em] grid-cols-2">
+        <div
+        className="flex flex-col gap-1 items-center"
+        >
+          <Videos 
+          isLocal={true} 
+          stream={localStream}
           isScreenShare = {isScreenShare}
           />
-        <p
-        className=""
-        >{remoteSubtitle}</p>
-      </div>
+          <p 
+          className=""
+          >{localSubtitle}</p>
+        </div>
+        <div
+        className="flex flex-col gap-1 items-center"
+        >
+          <Videos
+            isLocal={false} 
+            stream={remoteStream} 
+            isScreenShare = {isScreenShare}
+            />
+          <p
+          className=""
+          >{remoteSubtitle}</p>
+        </div>
 
-      </div>
-      <div className="w-full flex gap-10 justify-center mt-10">
-        <button 
-          onClick={hanldeScreenShareBtn}
-          className="border p-2 active:bg-slate-500"
-        >Share screen</button>
-        <button 
-          onClick={create_speech_recognition}
-          className="border p-2 active:bg-slate-500"
-          >Enable Subtitle</button>
-      </div>
-      <div className="absolute bottom-15 w-full flex justify-center bg-inherit">
+        </div>
+        <div className="w-full flex gap-10 justify-center mt-10">
+          <button 
+            onClick={hanldeScreenShareBtn}
+            className="border p-2 active:bg-slate-500"
+          >Share screen</button>
+          <button 
+            onClick={create_speech_recognition}
+            className="border p-2 active:bg-slate-500"
+            >Enable Subtitle</button>
+            <button 
+            onClick={handleRecordBtn}
+            className="border p-2 active:bg-slate-500"
+            >{record_btn_val}</button>
+            { 
+              mediaRecorderRef.current.state !== "inactive"
+            ? (
+              <button 
+                onClick={handleStopRecordingBtn}
+                className="border p-2 active:bg-slate-500"
+            >Stop Recording</button>
+            ) : ""
+            }
+        </div>
+        <div className="absolute bottom-15 w-full flex justify-center bg-inherit">
 
-        {/* <div className="bg-black/70 text-white px-4 py-2 rounded-lg">
-          {subtitle}
-        </div> */}
+          {/* <div className="bg-black/70 text-white px-4 py-2 rounded-lg">
+            {subtitle}
+          </div> */}
 
-      </div>
-      <div 
-        className="w-full max-w-xl mx-auto mt-10 border rounded-lg overflow-hidden text-[#1f1f1f]"
-      >
-
+        </div>
         <div 
-          id="message"
-          className="h-80 overflow-y-auto bg-gray-100 p-4 flex flex-col gap-3"
+          className="w-full max-w-xl mx-auto mt-10 border rounded-lg overflow-hidden text-[#1f1f1f]"
         >
 
-          {message.length ? (
-            message.map((msg, idx) => (
-              <div
-                key={idx}
-                className={`flex ${
-                  msg.sender === "me"
-                    ? "justify-end"
-                    : "justify-start"
-                }`}
-              >
-
-                <div
-                  className={`
-                    max-w-[70%]
-                    px-4 py-2 rounded-2xl shadow
-                    break-words
-                    ${
-                      msg.sender === "me"
-                        ? "bg-blue-500 text-white rounded-br-sm"
-                        : "bg-white text-black rounded-bl-sm"
-                    }
-                  `}
-                >
-                  {msg.text}
-                </div>
-
-              </div>
-            ))
-          ) : (
-            <p className="text-gray-500 text-center">
-              No message yet
-            </p>
-          )}
-
-        </div>
-
-        <div className="flex items-center gap-2 p-3 border-t bg-white">
-
-          <input
-            type="text"
-            placeholder="Enter your message"
-            className="flex-1 border rounded-md px-3 py-2 outline-none"
-            value={input_val}
-            onChange={(e) => setInputValue(e.target.value)}
-            onKeyDown={e => {
-              if(e.key === "Enter") handleMsgSendBtn();
-            }
-            }
-          />
-
-          <button
-            className="bg-blue-500 text-white px-4 py-2 rounded-md"
-            onClick={handleMsgSendBtn}
+          <div 
+            id="message"
+            className="h-80 overflow-y-auto bg-gray-100 p-4 flex flex-col gap-3"
           >
-            Send
-          </button>
 
+            {message.length ? (
+              message.map((msg, idx) => (
+                <div
+                  key={idx}
+                  className={`flex ${
+                    msg.sender === "me"
+                      ? "justify-end"
+                      : "justify-start"
+                  }`}
+                >
+
+                  <div
+                    className={`
+                      max-w-[70%]
+                      px-4 py-2 rounded-2xl shadow
+                      break-words
+                      ${
+                        msg.sender === "me"
+                          ? "bg-blue-500 text-white rounded-br-sm"
+                          : "bg-white text-black rounded-bl-sm"
+                      }
+                    `}
+                  >
+                    {msg.text}
+                  </div>
+
+                </div>
+              ))
+            ) : (
+              <p className="text-gray-500 text-center">
+                No message yet
+              </p>
+            )}
+
+          </div>
+
+          <div className="flex items-center gap-2 p-3 border-t bg-white">
+
+            <input
+              type="text"
+              placeholder="Enter your message"
+              className="flex-1 border rounded-md px-3 py-2 outline-none"
+              value={input_val}
+              onChange={(e) => setInputValue(e.target.value)}
+              onKeyDown={e => {
+                if(e.key === "Enter") handleMsgSendBtn();
+              }
+              }
+            />
+
+            <button
+              className="bg-blue-500 text-white px-4 py-2 rounded-md"
+              onClick={handleMsgSendBtn}
+            >
+              Send
+            </button>
+
+          </div>
         </div>
-      </div>
-    </>
-  )
-}
+      </>
+    )
+  }

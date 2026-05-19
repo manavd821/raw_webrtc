@@ -1,5 +1,8 @@
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, WebSocketException
+import uuid
+
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, WebSocketException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from pathlib import Path
 
 sockets = {}
 user_ids = []
@@ -37,6 +40,21 @@ async def create_the_offer():
         "to" : user_ids[0],
     }
     await send_data(data)
+
+async def store_video(video_bytes, client_id):
+    directory_path = Path("videos");
+    directory_path.mkdir(exist_ok=True)
+    
+    file_path = directory_path / f"video_{client_id}.webm"
+    
+    with file_path.open("ab") as buffer:
+        buffer.write(video_bytes)
+            
+    return {
+        "type" : "recording",
+        "message": "Video uploaded successfully",
+        "path": str(file_path),
+    }
     
 @app.get('/')
 async def home():
@@ -69,3 +87,27 @@ async def handle_signaling(ws : WebSocket, client_id : str):
         print(f"{client_id} disconnected")
         user_ids.remove(client_id)
         sockets.pop(client_id)
+
+@app.websocket("/ws/upload_video/{client_id}")
+async def get_video(ws: WebSocket, client_id : str):
+    try:
+        await ws.accept()
+    except WebSocketException as e:
+        print(e.code)
+        
+    try:
+        while True:
+            video_bytes = await ws.receive_bytes()
+            success_msg = await store_video(video_bytes, client_id)
+            await ws.send_json(success_msg)
+            
+    except WebSocketDisconnect:
+        try:
+            print(f"{client_id} disconnected")
+            user_ids.remove(client_id)
+            sockets.pop(client_id)
+        except ValueError as e:
+            print("")
+    except Exception as e:
+        print(e)
+    
